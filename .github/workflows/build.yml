@@ -48,8 +48,7 @@ jobs:
             -archivePath build/PeraperaPDF.xcarchive \
             -destination "generic/platform=iOS" \
             CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM=83VGKGSQUH \
-            | xcpretty
+            DEVELOPMENT_TEAM=83VGKGSQUH
 
       - name: Export IPA
         run: |
