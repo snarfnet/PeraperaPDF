@@ -235,7 +235,7 @@ struct TranslationSheet: View {
                         }
                         .padding(20)
                     }
-                    .translationPresentation(isPresented: $showTranslation, text: text)
+                    .modifier(TranslationViewModifier(isPresented: $showTranslation, text: text))
 
                     Button {
                         showTranslation = true
@@ -262,6 +262,27 @@ struct TranslationSheet: View {
                         .font(.system(size: 18))
                 }
             }
+        }
+    }
+}
+
+@available(iOS 17.4, *)
+private struct TranslationViewModifierAvailable: ViewModifier {
+    @Binding var isPresented: Bool
+    let text: String
+    func body(content: Content) -> some View {
+        content.translationPresentation(isPresented: $isPresented, text: text)
+    }
+}
+
+private struct TranslationViewModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let text: String
+    func body(content: Content) -> some View {
+        if #available(iOS 17.4, *) {
+            content.modifier(TranslationViewModifierAvailable(isPresented: $isPresented, text: text))
+        } else {
+            content
         }
     }
 }
