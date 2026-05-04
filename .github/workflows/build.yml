@@ -36,8 +36,12 @@ jobs:
           security list-keychain -d user -s build.keychain
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
 
+      - name: Install xcpretty
+        run: gem install xcpretty
+
       - name: Build and Archive
         run: |
+          set -o pipefail
           xcodebuild archive \
             -scheme PeraperaPDF \
             -configuration Release \
