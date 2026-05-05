@@ -1,6 +1,30 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var selectedTab = 0
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            OpenPDFView()
+                .tabItem {
+                    Label("開く", systemImage: "doc.text.magnifyingglass")
+                }
+                .tag(0)
+
+            NavigationStack {
+                PDFCreatorView()
+            }
+            .tabItem {
+                Label("作成", systemImage: "doc.badge.plus")
+            }
+            .tag(1)
+        }
+    }
+}
+
+// MARK: - PDF を開く画面（元のホーム）
+
+struct OpenPDFView: View {
     @State private var pdfURL: URL?
     @State private var showFilePicker = false
     @State private var recentFiles: [URL] = []
@@ -10,7 +34,6 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(spacing: 24) {
-                        // ヘッダー
                         VStack(spacing: 8) {
                             Image(systemName: "doc.text.magnifyingglass")
                                 .font(.system(size: 64))
@@ -23,7 +46,6 @@ struct ContentView: View {
                         }
                         .padding(.top, 40)
 
-                        // ファイルを開くボタン
                         Button {
                             showFilePicker = true
                         } label: {
@@ -41,7 +63,6 @@ struct ContentView: View {
                             .padding(.horizontal, 24)
                         }
 
-                        // 最近開いたファイル
                         if !recentFiles.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("最近開いたファイル")

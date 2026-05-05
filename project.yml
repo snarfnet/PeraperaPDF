@@ -40,6 +40,7 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         GADApplicationIdentifier: ca-app-pub-9404799280370656~4477837648
         NSUserTrackingUsageDescription: "パーソナライズ広告のためにトラッキングデータを使用します。"
+        NSPhotoLibraryUsageDescription: "写真をPDFに変換するために使用します。"
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         UISupportsDocumentBrowser: true
