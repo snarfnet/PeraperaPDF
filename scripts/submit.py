@@ -3,6 +3,7 @@ import jwt, time, requests, sys
 KEY_ID = 'WDXGY9WX55'
 ISSUER = '2be0734f-943a-4d61-9dc9-5d9045c46fec'
 APP_ID = '6766239057'
+PRIVACY_URL = 'https://snarfnet.github.io/'
 BUILD_NUMBER = sys.argv[1]
 
 p8 = open('/tmp/asc_key.p8').read()
@@ -46,6 +47,23 @@ api('PATCH', f'/builds/{build_id}', json={
              'attributes': {'usesNonExemptEncryption': False}}
 })
 
+# contentRightsDeclaration
+api('PATCH', f'/apps/{APP_ID}', json={
+    'data': {'type': 'apps', 'id': APP_ID,
+             'attributes': {'contentRightsDeclaration': 'DOES_NOT_USE_THIRD_PARTY_CONTENT'}}
+})
+
+# privacyPolicyUrl を appInfoLocalizations に設定
+app_infos = api('GET', f'/apps/{APP_ID}/appInfos')
+for info in app_infos.get('data', []):
+    locs = api('GET', f'/appInfos/{info["id"]}/appInfoLocalizations')
+    for loc in locs.get('data', []):
+        loc_id = loc['id']
+        api('PATCH', f'/appInfoLocalizations/{loc_id}', json={
+            'data': {'type': 'appInfoLocalizations', 'id': loc_id,
+                     'attributes': {'privacyPolicyUrl': PRIVACY_URL}}
+        })
+
 # バージョン取得
 versions = api('GET', f'/apps/{APP_ID}/appStoreVersions?filter[appStoreState]=PREPARE_FOR_SUBMISSION')
 if not versions['data']:
@@ -57,6 +75,21 @@ if not versions['data']:
     sys.exit(1)
 
 version_id = versions['data'][0]['id']
+
+# レビュー詳細（デモアカウント不要）
+review_details = api('GET', f'/appStoreVersions/{version_id}/appStoreReviewDetail')
+if review_details.get('data'):
+    rd_id = review_details['data']['id']
+    api('PATCH', f'/appStoreReviewDetails/{rd_id}', json={
+        'data': {'type': 'appStoreReviewDetails', 'id': rd_id,
+                 'attributes': {'demoAccountRequired': False, 'demoAccountName': '', 'demoAccountPassword': ''}}
+    })
+else:
+    api('POST', '/appStoreReviewDetails', json={
+        'data': {'type': 'appStoreReviewDetails',
+                 'attributes': {'demoAccountRequired': False, 'demoAccountName': '', 'demoAccountPassword': ''},
+                 'relationships': {'appStoreVersion': {'data': {'type': 'appStoreVersions', 'id': version_id}}}}
+    })
 
 # ビルドをバージョンに紐付け
 api('PATCH', f'/appStoreVersions/{version_id}', json={
