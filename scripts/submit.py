@@ -6,6 +6,13 @@ APP_ID = '6766239057'
 PRIVACY_URL = 'https://snarfnet.github.io/'
 BUILD_NUMBER = sys.argv[1]
 
+REVIEW_CONTACT = {
+    'contactFirstName': '聖',
+    'contactLastName': '尼崎',
+    'contactEmail': 'tokyonasu@yahoo.co.jp',
+    'contactPhone': '+81 80-2368-9194',
+}
+
 p8 = open('/tmp/asc_key.p8').read()
 
 def make_token():
@@ -76,18 +83,18 @@ if not versions['data']:
 
 version_id = versions['data'][0]['id']
 
-# レビュー詳細（デモアカウント不要）
+# レビュー詳細（連絡先 + デモアカウント不要）
+rd_attrs = {**REVIEW_CONTACT, 'demoAccountRequired': False, 'demoAccountName': '', 'demoAccountPassword': ''}
 review_details = api('GET', f'/appStoreVersions/{version_id}/appStoreReviewDetail')
 if review_details.get('data'):
     rd_id = review_details['data']['id']
     api('PATCH', f'/appStoreReviewDetails/{rd_id}', json={
-        'data': {'type': 'appStoreReviewDetails', 'id': rd_id,
-                 'attributes': {'demoAccountRequired': False, 'demoAccountName': '', 'demoAccountPassword': ''}}
+        'data': {'type': 'appStoreReviewDetails', 'id': rd_id, 'attributes': rd_attrs}
     })
 else:
     api('POST', '/appStoreReviewDetails', json={
         'data': {'type': 'appStoreReviewDetails',
-                 'attributes': {'demoAccountRequired': False, 'demoAccountName': '', 'demoAccountPassword': ''},
+                 'attributes': rd_attrs,
                  'relationships': {'appStoreVersion': {'data': {'type': 'appStoreVersions', 'id': version_id}}}}
     })
 
