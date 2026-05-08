@@ -75,15 +75,21 @@ for info in app_infos.get('data', []):
                      'attributes': {'privacyPolicyUrl': PRIVACY_URL}}
         })
 
-# バージョン取得
+# バージョン取得（なければ新規作成）
+VERSION_STRING = '1.1'
 versions = api('GET', f'/apps/{APP_ID}/appStoreVersions?filter[appStoreState]=PREPARE_FOR_SUBMISSION')
 if not versions['data']:
-    versions = api('GET', f'/apps/{APP_ID}/appStoreVersions?filter[appStoreState]=WAITING_FOR_REVIEW,IN_REVIEW,READY_FOR_SALE')
+    versions = api('GET', f'/apps/{APP_ID}/appStoreVersions?filter[appStoreState]=WAITING_FOR_REVIEW,IN_REVIEW')
     if versions['data']:
         print('Already submitted or in review, skipping')
         sys.exit(0)
-    print('No version found')
-    sys.exit(1)
+    print(f'Creating new version {VERSION_STRING}...')
+    new_ver = api('POST', '/appStoreVersions', json={
+        'data': {'type': 'appStoreVersions',
+                 'attributes': {'versionString': VERSION_STRING, 'platform': 'IOS'},
+                 'relationships': {'app': {'data': {'type': 'apps', 'id': APP_ID}}}}
+    })
+    versions = {'data': [new_ver['data']]}
 
 version_id = versions['data'][0]['id']
 
