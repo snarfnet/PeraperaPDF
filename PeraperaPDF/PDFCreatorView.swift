@@ -2,15 +2,13 @@ import SwiftUI
 import PhotosUI
 import WebKit
 
-// MARK: - メイン作成画面
-
 struct PDFCreatorView: View {
     @State private var selectedTab = 0
 
     var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $selectedTab) {
-                Text("テキスト").tag(0)
+                Text("文章").tag(0)
                 Text("写真").tag(1)
                 Text("Web").tag(2)
             }
@@ -27,12 +25,11 @@ struct PDFCreatorView: View {
             BannerAdView()
                 .frame(height: 50)
         }
-        .navigationTitle("PDFを作成")
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle("PDFを作る")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
-
-// MARK: - テキスト -> PDF
 
 struct TextToPDFView: View {
     @State private var titleText = ""
@@ -40,45 +37,45 @@ struct TextToPDFView: View {
     @State private var pdfURL: URL? = nil
     @State private var showShare = false
 
+    private var canCreatePDF: Bool {
+        !titleText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("タイトル")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.secondary)
-                TextField("タイトルを入力", text: $titleText)
-                    .font(.system(size: 18, weight: .bold))
-                    .padding(12)
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(10)
+            VStack(alignment: .leading, spacing: 18) {
+                SectionHeader(title: "1. タイトル", subtitle: "空欄でも作れます")
+                TextField("例：旅行のメモ", text: $titleText)
+                    .font(.system(size: 21, weight: .bold))
+                    .padding(14)
+                    .background(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-                Text("本文")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.secondary)
+                SectionHeader(title: "2. 本文", subtitle: "ここに文章を入れてください")
                 TextEditor(text: $bodyText)
-                    .font(.system(size: 16))
-                    .frame(minHeight: 220)
-                    .padding(8)
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(10)
+                    .font(.system(size: 20))
+                    .lineSpacing(5)
+                    .frame(minHeight: 260)
+                    .padding(10)
+                    .scrollContentBackground(.hidden)
+                    .background(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 Button {
                     generatePDF()
                 } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "doc.badge.arrow.up")
-                        Text("PDFを生成")
-                            .font(.system(size: 18, weight: .bold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(titleText.isEmpty && bodyText.isEmpty ? Color.gray : Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
+                    Label("PDFを作成して共有", systemImage: "doc.badge.plus")
+                        .font(.system(size: 21, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 18)
+                        .background(canCreatePDF ? .indigo : .gray)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                .disabled(titleText.isEmpty && bodyText.isEmpty)
+                .disabled(!canCreatePDF)
             }
-            .padding(16)
+            .padding(18)
         }
         .sheet(isPresented: $showShare) {
             if let url = pdfURL {
@@ -90,46 +87,86 @@ struct TextToPDFView: View {
     private func generatePDF() {
         let pageRect = CGRect(x: 0, y: 0, width: 595, height: 842)
         let renderer = UIGraphicsPDFRenderer(bounds: pageRect)
+        let margin: CGFloat = 48
+        let bodyChunks = chunked(bodyText, maxLength: 1800)
+
         let data = renderer.pdfData { ctx in
-            ctx.beginPage()
-            let margin: CGFloat = 48
-            var y = margin
-
-            if !titleText.isEmpty {
-                let attrs: [NSAttributedString.Key: Any] = [
-                    .font: UIFont.boldSystemFont(ofSize: 22),
-                    .foregroundColor: UIColor.black
-                ]
-                NSAttributedString(string: titleText, attributes: attrs)
-                    .draw(in: CGRect(x: margin, y: y, width: pageRect.width - margin * 2, height: 50))
-                y += 56
-                let line = UIBezierPath()
-                line.move(to: CGPoint(x: margin, y: y))
-                line.addLine(to: CGPoint(x: pageRect.width - margin, y: y))
-                UIColor.lightGray.setStroke()
-                line.lineWidth = 0.5
-                line.stroke()
-                y += 16
-            }
-
-            if !bodyText.isEmpty {
-                let attrs: [NSAttributedString.Key: Any] = [
-                    .font: UIFont.systemFont(ofSize: 13),
-                    .foregroundColor: UIColor.black
-                ]
-                NSAttributedString(string: bodyText, attributes: attrs)
-                    .draw(in: CGRect(x: margin, y: y, width: pageRect.width - margin * 2, height: pageRect.height - y - margin))
+            if bodyChunks.isEmpty {
+                drawPage(ctx: ctx, pageRect: pageRect, margin: margin, title: titleText, body: "")
+            } else {
+                for (index, chunk) in bodyChunks.enumerated() {
+                    drawPage(
+                        ctx: ctx,
+                        pageRect: pageRect,
+                        margin: margin,
+                        title: index == 0 ? titleText : "",
+                        body: chunk
+                    )
+                }
             }
         }
+
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("text_\(Int(Date().timeIntervalSince1970)).pdf")
         try? data.write(to: url)
         pdfURL = url
         showShare = true
     }
-}
 
-// MARK: - 写真 -> PDF
+    private func drawPage(
+        ctx: UIGraphicsPDFRendererContext,
+        pageRect: CGRect,
+        margin: CGFloat,
+        title: String,
+        body: String
+    ) {
+        ctx.beginPage()
+        var y = margin
+
+        if !title.isEmpty {
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.boldSystemFont(ofSize: 24),
+                .foregroundColor: UIColor.black
+            ]
+            NSAttributedString(string: title, attributes: attrs)
+                .draw(in: CGRect(x: margin, y: y, width: pageRect.width - margin * 2, height: 60))
+            y += 64
+
+            let line = UIBezierPath()
+            line.move(to: CGPoint(x: margin, y: y))
+            line.addLine(to: CGPoint(x: pageRect.width - margin, y: y))
+            UIColor.systemGray3.setStroke()
+            line.lineWidth = 0.7
+            line.stroke()
+            y += 18
+        }
+
+        guard !body.isEmpty else { return }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 5
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 15),
+            .foregroundColor: UIColor.black,
+            .paragraphStyle: paragraph
+        ]
+        NSAttributedString(string: body, attributes: attrs)
+            .draw(in: CGRect(x: margin, y: y, width: pageRect.width - margin * 2, height: pageRect.height - y - margin))
+    }
+
+    private func chunked(_ text: String, maxLength: Int) -> [String] {
+        let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanText.isEmpty else { return [] }
+
+        var chunks: [String] = []
+        var start = cleanText.startIndex
+        while start < cleanText.endIndex {
+            let end = cleanText.index(start, offsetBy: maxLength, limitedBy: cleanText.endIndex) ?? cleanText.endIndex
+            chunks.append(String(cleanText[start..<end]))
+            start = end
+        }
+        return chunks
+    }
+}
 
 struct PhotosToPDFView: View {
     @State private var selectedItems: [PhotosPickerItem] = []
@@ -140,62 +177,64 @@ struct PhotosToPDFView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(spacing: 18) {
                 PhotosPicker(selection: $selectedItems, maxSelectionCount: 30, matching: .images) {
-                    VStack(spacing: 10) {
+                    VStack(spacing: 12) {
                         Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 40))
-                            .foregroundColor(.blue)
-                        Text(images.isEmpty ? "写真を選ぶ" : "写真を変更する")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.blue)
-                        Text("最大30枚")
-                            .font(.system(size: 13))
-                            .foregroundColor(.secondary)
+                            .font(.system(size: 48, weight: .semibold))
+                            .foregroundStyle(.indigo)
+
+                        Text(images.isEmpty ? "写真を選ぶ" : "写真を選び直す")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(.indigo)
+
+                        Text("最大30枚まで。選んだ順番でPDFにします。")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 24)
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(12)
+                    .padding(.vertical, 28)
+                    .background(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+
+                if isLoading {
+                    ProgressView("写真を読み込み中")
+                        .font(.system(size: 18, weight: .semibold))
+                        .padding()
                 }
 
                 if !images.isEmpty {
                     LazyVGrid(
                         columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())],
-                        spacing: 4
+                        spacing: 6
                     ) {
                         ForEach(images.indices, id: \.self) { i in
                             Image(uiImage: images[i])
                                 .resizable()
                                 .scaledToFill()
-                                .frame(height: 110)
+                                .frame(height: 118)
                                 .clipped()
-                                .cornerRadius(6)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                     }
 
                     Button {
                         generatePDF()
                     } label: {
-                        HStack(spacing: 8) {
-                            if isLoading {
-                                ProgressView().tint(.white)
-                            } else {
-                                Image(systemName: "doc.badge.arrow.up")
-                            }
-                            Text(isLoading ? "生成中..." : "PDFを生成（\(images.count)枚）")
-                                .font(.system(size: 18, weight: .bold))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(isLoading ? Color.gray : Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
+                        Label("PDFを作成して共有（\(images.count)枚）", systemImage: "doc.badge.plus")
+                            .font(.system(size: 20, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 18)
+                            .background(isLoading ? .gray : .indigo)
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
                     .disabled(isLoading)
                 }
             }
-            .padding(16)
+            .padding(18)
         }
         .onChange(of: selectedItems) { _, items in
             loadImages(from: items)
@@ -210,40 +249,39 @@ struct PhotosToPDFView: View {
     private func loadImages(from items: [PhotosPickerItem]) {
         images = []
         isLoading = true
-        var loaded: [(Int, UIImage)] = []
-        let group = DispatchGroup()
-        for (i, item) in items.enumerated() {
-            group.enter()
-            item.loadTransferable(type: Data.self) { result in
-                if case .success(let data) = result, let data, let img = UIImage(data: data) {
-                    loaded.append((i, img))
+        Task {
+            var loaded: [(Int, UIImage)] = []
+            for (index, item) in items.enumerated() {
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    loaded.append((index, image))
                 }
-                group.leave()
             }
-        }
-        group.notify(queue: .main) {
-            images = loaded.sorted { $0.0 < $1.0 }.map { $0.1 }
-            isLoading = false
+            await MainActor.run {
+                images = loaded.sorted { $0.0 < $1.0 }.map { $0.1 }
+                isLoading = false
+            }
         }
     }
 
     private func generatePDF() {
         isLoading = true
+        let sourceImages = images
         DispatchQueue.global(qos: .userInitiated).async {
             let pageSize = CGSize(width: 595, height: 842)
             let renderer = UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: pageSize))
             let data = renderer.pdfData { ctx in
-                for image in images {
+                for image in sourceImages {
                     ctx.beginPage()
                     let imgRatio = image.size.width / image.size.height
                     let pageRatio = pageSize.width / pageSize.height
                     let drawRect: CGRect
                     if imgRatio > pageRatio {
-                        let h = pageSize.width / imgRatio
-                        drawRect = CGRect(x: 0, y: (pageSize.height - h) / 2, width: pageSize.width, height: h)
+                        let height = pageSize.width / imgRatio
+                        drawRect = CGRect(x: 0, y: (pageSize.height - height) / 2, width: pageSize.width, height: height)
                     } else {
-                        let w = pageSize.height * imgRatio
-                        drawRect = CGRect(x: (pageSize.width - w) / 2, y: 0, width: w, height: pageSize.height)
+                        let width = pageSize.height * imgRatio
+                        drawRect = CGRect(x: (pageSize.width - width) / 2, y: 0, width: width, height: pageSize.height)
                     }
                     image.draw(in: drawRect)
                 }
@@ -260,10 +298,8 @@ struct PhotosToPDFView: View {
     }
 }
 
-// MARK: - Web -> PDF
-
 struct WebToPDFView: View {
-    @State private var urlString = "https://"
+    @State private var urlString = ""
     @State private var isPageLoading = false
     @State private var isExporting = false
     @State private var showWebView = false
@@ -273,75 +309,80 @@ struct WebToPDFView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Image(systemName: "globe")
-                    .foregroundColor(.secondary)
-                TextField("URLを入力", text: $urlString)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                TextField("例：https://example.com", text: $urlString)
+                    .font(.system(size: 19))
                     .keyboardType(.URL)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
+
                 Button {
                     loadPage()
                 } label: {
                     Image(systemName: "arrow.right.circle.fill")
-                        .font(.system(size: 32))
-                        .foregroundColor(.blue)
+                        .font(.system(size: 36))
+                        .foregroundStyle(.indigo)
                 }
+                .accessibilityLabel("Webページを開く")
             }
-            .padding(12)
-            .background(Color(.secondarySystemBackground))
-            .cornerRadius(12)
+            .padding(14)
+            .background(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .padding(.horizontal, 16)
+            .padding(.top, 16)
 
-            if showWebView, let url = URL(string: urlString) {
+            if showWebView, let url = normalizedURL {
                 ZStack(alignment: .top) {
                     WebViewRepresentable(
                         url: url,
                         isLoading: $isPageLoading,
-                        onWebViewCreated: { wv in webView = wv }
+                        onWebViewCreated: { webView = $0 }
                     )
+
                     if isPageLoading {
-                        ProgressView()
-                            .padding(8)
+                        ProgressView("読み込み中")
+                            .font(.system(size: 17, weight: .semibold))
+                            .padding(10)
                             .background(.regularMaterial)
-                            .cornerRadius(8)
-                            .padding(.top, 8)
+                            .clipShape(Capsule())
+                            .padding(.top, 10)
                     }
                 }
 
                 Button {
                     exportToPDF()
                 } label: {
-                    HStack(spacing: 8) {
-                        if isExporting {
-                            ProgressView().tint(.white)
-                        } else {
-                            Image(systemName: "doc.badge.arrow.up")
-                        }
-                        Text(isExporting ? "変換中..." : "このページをPDFに変換")
-                            .font(.system(size: 17, weight: .bold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(isPageLoading || isExporting ? Color.gray : Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-                    .padding(.horizontal, 16)
+                    Label(isExporting ? "PDFに変換中" : "このページをPDFにする", systemImage: "doc.badge.plus")
+                        .font(.system(size: 20, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 17)
+                        .background(isPageLoading || isExporting ? .gray : .indigo)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .padding(.horizontal, 16)
                 }
                 .disabled(isPageLoading || isExporting)
             } else {
                 Spacer()
-                VStack(spacing: 12) {
+                VStack(spacing: 14) {
                     Image(systemName: "safari")
-                        .font(.system(size: 52))
-                        .foregroundColor(.secondary.opacity(0.4))
-                    Text("URLを入力して矢印を押してください")
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 58, weight: .semibold))
+                        .foregroundStyle(.secondary.opacity(0.45))
+
+                    Text("URLを入れて、右の矢印を押してください。")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
                 }
                 Spacer()
             }
         }
-        .padding(.top, 16)
+        .background(Color(.systemGroupedBackground))
         .sheet(isPresented: $showShare) {
             if let url = pdfURL {
                 ShareSheet(url: url)
@@ -349,15 +390,24 @@ struct WebToPDFView: View {
         }
     }
 
+    private var normalizedURL: URL? {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+            return URL(string: trimmed)
+        }
+        return URL(string: "https://\(trimmed)")
+    }
+
     private func loadPage() {
-        guard URL(string: urlString) != nil else { return }
+        guard normalizedURL != nil else { return }
         showWebView = true
     }
 
     private func exportToPDF() {
-        guard let wv = webView else { return }
+        guard let webView else { return }
         isExporting = true
-        wv.createPDF { result in
+        webView.createPDF { result in
             DispatchQueue.main.async {
                 isExporting = false
                 if case .success(let data) = result {
@@ -380,30 +430,62 @@ struct WebViewRepresentable: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> WKWebView {
-        let wv = WKWebView()
-        wv.navigationDelegate = context.coordinator
-        wv.load(URLRequest(url: url))
-        onWebViewCreated(wv)
-        return wv
+        let webView = WKWebView()
+        webView.navigationDelegate = context.coordinator
+        webView.load(URLRequest(url: url))
+        onWebViewCreated(webView)
+        return webView
     }
 
-    func updateUIView(_ wv: WKWebView, context: Context) {}
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        if webView.url != url {
+            webView.load(URLRequest(url: url))
+        }
+    }
 
     class Coordinator: NSObject, WKNavigationDelegate {
         var parent: WebViewRepresentable
-        init(_ parent: WebViewRepresentable) { self.parent = parent }
-        func webView(_ wv: WKWebView, didStartProvisionalNavigation _: WKNavigation!) { parent.isLoading = true }
-        func webView(_ wv: WKWebView, didFinish _: WKNavigation!) { parent.isLoading = false }
-        func webView(_ wv: WKWebView, didFail _: WKNavigation!, withError _: Error) { parent.isLoading = false }
+
+        init(_ parent: WebViewRepresentable) {
+            self.parent = parent
+        }
+
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            parent.isLoading = true
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            parent.isLoading = false
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            parent.isLoading = false
+        }
     }
 }
 
-// MARK: - 共有シート
-
 struct ShareSheet: UIViewControllerRepresentable {
     let url: URL
+
     func makeUIViewController(context: Context) -> UIActivityViewController {
         UIActivityViewController(activityItems: [url], applicationActivities: nil)
     }
-    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
+
+    func updateUIViewController(_ viewController: UIActivityViewController, context: Context) {}
+}
+
+private struct SectionHeader: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 20, weight: .bold))
+
+            Text(subtitle)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+    }
 }

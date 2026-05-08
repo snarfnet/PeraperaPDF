@@ -1,10 +1,12 @@
-import jwt, time, requests, sys
+import jwt, time, requests, sys, os, hashlib, glob, base64
 
 KEY_ID = 'WDXGY9WX55'
 ISSUER = '2be0734f-943a-4d61-9dc9-5d9045c46fec'
 APP_ID = '6766239057'
 PRIVACY_URL = 'https://snarfnet.github.io/'
 BUILD_NUMBER = sys.argv[1]
+SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), '..', 'output', 'screenshots')
+SCREENSHOT_DISPLAY_TYPE = 'APP_IPHONE_67'
 
 REVIEW_CONTACT = {
     'contactFirstName': '聖',
@@ -30,7 +32,9 @@ def api(method, path, **kwargs):
     if not r.ok:
         print(f'ERROR {r.status_code}: {r.text}')
         sys.exit(1)
-    return r.json() if r.text else {}
+    if r.status_code == 204 or not r.text:
+        return {}
+    return r.json()
 
 # ビルド待機
 print('Waiting for build...')
@@ -97,6 +101,73 @@ else:
                  'attributes': rd_attrs,
                  'relationships': {'appStoreVersion': {'data': {'type': 'appStoreVersions', 'id': version_id}}}}
     })
+
+# スクリーンショットアップロード
+print('Uploading screenshots...')
+locs = api('GET', f'/appStoreVersions/{version_id}/appStoreVersionLocalizations')
+for loc in locs.get('data', []):
+    loc_id = loc['id']
+    locale = loc['attributes']['locale']
+    print(f'  Locale: {locale}')
+
+    # 既存スクショセットを削除
+    sets = api('GET', f'/appStoreVersionLocalizations/{loc_id}/appScreenshotSets')
+    for s in sets.get('data', []):
+        if s['attributes']['screenshotDisplayType'] == SCREENSHOT_DISPLAY_TYPE:
+            # 既存スクショを個別削除
+            existing = api('GET', f'/appScreenshotSets/{s["id"]}/appScreenshots')
+            for sc in existing.get('data', []):
+                api('DELETE', f'/appScreenshots/{sc["id"]}')
+            api('DELETE', f'/appScreenshotSets/{s["id"]}')
+
+    # 新しいスクショセット作成
+    ss_set = api('POST', '/appScreenshotSets', json={
+        'data': {'type': 'appScreenshotSets',
+                 'attributes': {'screenshotDisplayType': SCREENSHOT_DISPLAY_TYPE},
+                 'relationships': {'appStoreVersionLocalization': {
+                     'data': {'type': 'appStoreVersionLocalizations', 'id': loc_id}}}}
+    })
+    set_id = ss_set['data']['id']
+
+    # スクショファイルをアップロード
+    files = sorted(glob.glob(os.path.join(SCREENSHOT_DIR, '*.png')))
+    for i, fpath in enumerate(files):
+        fname = os.path.basename(fpath)
+        fsize = os.path.getsize(fpath)
+        with open(fpath, 'rb') as f:
+            fdata = f.read()
+        md5 = hashlib.md5(fdata).digest()
+        md5_b64 = base64.b64encode(md5).decode()
+
+        # 予約
+        reservation = api('POST', '/appScreenshots', json={
+            'data': {'type': 'appScreenshots',
+                     'attributes': {'fileName': fname, 'fileSize': fsize},
+                     'relationships': {'appScreenshotSet': {
+                         'data': {'type': 'appScreenshotSets', 'id': set_id}}}}
+        })
+        ss_id = reservation['data']['id']
+        upload_ops = reservation['data']['attributes']['uploadOperations']
+
+        # チャンクアップロード
+        for op in upload_ops:
+            offset = op['offset']
+            length = op['length']
+            chunk = fdata[offset:offset + length]
+            upload_headers = {h['name']: h['value'] for h in op['requestHeaders']}
+            r = requests.put(op['url'], headers=upload_headers, data=chunk)
+            if not r.ok:
+                print(f'    Upload chunk failed: {r.status_code}')
+                sys.exit(1)
+
+        # コミット
+        api('PATCH', f'/appScreenshots/{ss_id}', json={
+            'data': {'type': 'appScreenshots', 'id': ss_id,
+                     'attributes': {'uploaded': True, 'sourceFileChecksum': md5_b64}}
+        })
+        print(f'    Uploaded: {fname}')
+
+print('Screenshots uploaded!')
 
 # ビルドをバージョンに紐付け
 api('PATCH', f'/appStoreVersions/{version_id}', json={

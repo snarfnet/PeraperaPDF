@@ -15,115 +15,141 @@ struct PDFReaderView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // ツールバー
-            HStack(spacing: 16) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.blue)
-                }
+            toolbar
 
-                Spacer()
-
-                // 文字サイズ調整
-                HStack(spacing: 8) {
-                    Button {
-                        if fontSize > 12 { fontSize -= 2 }
-                    } label: {
-                        Image(systemName: "textformat.size.smaller")
-                            .font(.system(size: 20))
-                    }
-                    Button {
-                        if fontSize < 28 { fontSize += 2 }
-                    } label: {
-                        Image(systemName: "textformat.size.larger")
-                            .font(.system(size: 20))
-                    }
+            PDFKitView(
+                url: url,
+                fontSize: fontSize,
+                currentPage: $currentPage,
+                totalPages: $totalPages,
+                onTextSelected: { text in
+                    selectedText = text
+                    showTranslation = !text.isEmpty
                 }
-
-                // ページ翻訳ボタン
-                Button {
-                    extractPageText()
-                    showPageTranslation = true
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "globe")
-                        Text("翻訳")
-                            .font(.system(size: 16, weight: .bold))
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Color(.systemBackground))
-            .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
-
-            // PDFビュー
-            PDFKitView(url: url, fontSize: fontSize, currentPage: $currentPage, totalPages: $totalPages, onTextSelected: { text in
-                selectedText = text
-                if !text.isEmpty {
-                    showTranslation = true
-                }
-            })
+            )
             .ignoresSafeArea(edges: .horizontal)
 
-            // ページナビゲーション
             if totalPages > 0 {
-                HStack(spacing: 20) {
-                    Button {
-                        if currentPage > 0 { currentPage -= 1 }
-                    } label: {
-                        Image(systemName: "chevron.left.circle.fill")
-                            .font(.system(size: 36))
-                            .foregroundColor(currentPage > 0 ? .blue : .gray)
-                    }
-                    .disabled(currentPage == 0)
-
-                    Text("\(currentPage + 1) / \(totalPages)")
-                        .font(.system(size: 18, weight: .bold))
-
-                    Button {
-                        if currentPage < totalPages - 1 { currentPage += 1 }
-                    } label: {
-                        Image(systemName: "chevron.right.circle.fill")
-                            .font(.system(size: 36))
-                            .foregroundColor(currentPage < totalPages - 1 ? .blue : .gray)
-                    }
-                    .disabled(currentPage == totalPages - 1)
-                }
-                .padding(.vertical, 10)
-                .background(Color(.systemBackground))
+                pageControls
             }
 
             BannerAdView()
                 .frame(height: 50)
         }
+        .background(Color(.systemBackground))
         .navigationBarHidden(true)
-        // 選択テキスト翻訳
         .sheet(isPresented: $showTranslation) {
-            TranslationSheet(text: selectedText, title: "選択した文を翻訳")
+            TranslationSheet(text: selectedText, title: "選択した文章を翻訳")
         }
-        // ページ全体翻訳
         .sheet(isPresented: $showPageTranslation) {
             TranslationSheet(text: pageText, title: "このページを翻訳")
         }
     }
 
+    private var toolbar: some View {
+        HStack(spacing: 12) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .bold))
+                    .frame(width: 38, height: 38)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(Circle())
+            }
+            .accessibilityLabel("戻る")
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(url.deletingPathExtension().lastPathComponent)
+                    .font(.system(size: 17, weight: .bold))
+                    .lineLimit(1)
+
+                Text(totalPages > 0 ? "\(currentPage + 1) / \(totalPages) ページ" : "PDFを読み込み中")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                if fontSize > 12 { fontSize -= 2 }
+            } label: {
+                Image(systemName: "textformat.size.smaller")
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: 34, height: 34)
+            }
+            .accessibilityLabel("文字を小さく")
+
+            Button {
+                if fontSize < 28 { fontSize += 2 }
+            } label: {
+                Image(systemName: "textformat.size.larger")
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: 34, height: 34)
+            }
+            .accessibilityLabel("文字を大きく")
+
+            Button {
+                extractPageText()
+                showPageTranslation = true
+            } label: {
+                Label("翻訳", systemImage: "globe")
+                    .font(.system(size: 17, weight: .bold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.indigo)
+                    .foregroundStyle(.white)
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.regularMaterial)
+    }
+
+    private var pageControls: some View {
+        HStack(spacing: 18) {
+            Button {
+                if currentPage > 0 { currentPage -= 1 }
+            } label: {
+                Image(systemName: "chevron.left.circle.fill")
+                    .font(.system(size: 34))
+                    .foregroundStyle(currentPage > 0 ? .indigo : .gray.opacity(0.45))
+            }
+            .disabled(currentPage == 0)
+            .accessibilityLabel("前のページ")
+
+            Text("\(currentPage + 1) / \(totalPages)")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .frame(minWidth: 84)
+                .padding(.vertical, 7)
+                .background(Color(.secondarySystemBackground))
+                .clipShape(Capsule())
+
+            Button {
+                if currentPage < totalPages - 1 { currentPage += 1 }
+            } label: {
+                Image(systemName: "chevron.right.circle.fill")
+                    .font(.system(size: 34))
+                    .foregroundStyle(currentPage < totalPages - 1 ? .indigo : .gray.opacity(0.45))
+            }
+            .disabled(currentPage == totalPages - 1)
+            .accessibilityLabel("次のページ")
+        }
+        .padding(.vertical, 10)
+        .background(Color(.systemBackground))
+    }
+
     private func extractPageText() {
         guard let doc = PDFDocument(url: url),
-              let page = doc.page(at: currentPage) else { return }
+              let page = doc.page(at: currentPage) else {
+            pageText = ""
+            return
+        }
         pageText = page.string ?? ""
     }
 }
 
-// MARK: - PDFKit UIViewRepresentable
 struct PDFKitView: UIViewRepresentable {
     let url: URL
     let fontSize: CGFloat
@@ -141,7 +167,7 @@ struct PDFKitView: UIViewRepresentable {
         pdfView.displayMode = .singlePage
         pdfView.displayDirection = .horizontal
         pdfView.usePageViewController(true, withViewOptions: nil)
-        pdfView.backgroundColor = UIColor.systemBackground
+        pdfView.backgroundColor = UIColor.systemGroupedBackground
 
         if let document = PDFDocument(url: url) {
             pdfView.document = document
@@ -157,8 +183,10 @@ struct PDFKitView: UIViewRepresentable {
             object: pdfView
         )
 
-        // 長押しで翻訳メニュー
-        let longPress = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
+        let longPress = UILongPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleLongPress(_:))
+        )
         pdfView.addGestureRecognizer(longPress)
 
         return pdfView
@@ -173,7 +201,6 @@ struct PDFKitView: UIViewRepresentable {
 
     class Coordinator: NSObject {
         var parent: PDFKitView
-        weak var pdfView: PDFView?
 
         init(_ parent: PDFKitView) {
             self.parent = parent
@@ -191,17 +218,17 @@ struct PDFKitView: UIViewRepresentable {
 
         @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
             guard gesture.state == .began,
-                  let pdfView = gesture.view as? PDFView else { return }
-            if let selection = pdfView.currentSelection, let text = selection.string, !text.isEmpty {
-                DispatchQueue.main.async {
-                    self.parent.onTextSelected(text)
-                }
+                  let pdfView = gesture.view as? PDFView,
+                  let selection = pdfView.currentSelection,
+                  let text = selection.string,
+                  !text.isEmpty else { return }
+            DispatchQueue.main.async {
+                self.parent.onTextSelected(text)
             }
         }
     }
 }
 
-// MARK: - 翻訳シート
 struct TranslationSheet: View {
     let text: String
     let title: String
@@ -212,26 +239,25 @@ struct TranslationSheet: View {
         NavigationStack {
             VStack(spacing: 0) {
                 if text.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.circle")
-                            .font(.system(size: 48))
-                            .foregroundColor(.orange)
-                        Text("テキストが見つかりませんでした")
-                            .font(.system(size: 20))
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ContentUnavailableView(
+                        "テキストが見つかりません",
+                        systemImage: "exclamationmark.circle",
+                        description: Text("画像だけのPDFでは、翻訳できる文章がない場合があります。")
+                    )
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 14) {
                             Text("原文")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.secondary)
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.secondary)
 
                             Text(text)
-                                .font(.system(size: 18))
+                                .font(.system(size: 17))
+                                .lineSpacing(4)
                                 .padding(16)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(Color(.secondarySystemBackground))
-                                .cornerRadius(12)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
                         .padding(20)
                     }
@@ -240,17 +266,14 @@ struct TranslationSheet: View {
                     Button {
                         showTranslation = true
                     } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "globe")
-                            Text("日本語に翻訳する")
-                                .font(.system(size: 20, weight: .bold))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 18)
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(14)
-                        .padding(20)
+                        Label("日本語に翻訳", systemImage: "globe")
+                            .font(.system(size: 19, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 17)
+                            .background(.indigo)
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .padding(20)
                     }
                 }
             }
@@ -259,7 +282,6 @@ struct TranslationSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("閉じる") { dismiss() }
-                        .font(.system(size: 18))
                 }
             }
         }
@@ -270,6 +292,7 @@ struct TranslationSheet: View {
 private struct TranslationViewModifierAvailable: ViewModifier {
     @Binding var isPresented: Bool
     let text: String
+
     func body(content: Content) -> some View {
         content.translationPresentation(isPresented: $isPresented, text: text)
     }
@@ -278,6 +301,7 @@ private struct TranslationViewModifierAvailable: ViewModifier {
 private struct TranslationViewModifier: ViewModifier {
     @Binding var isPresented: Bool
     let text: String
+
     func body(content: Content) -> some View {
         if #available(iOS 17.4, *) {
             content.modifier(TranslationViewModifierAvailable(isPresented: $isPresented, text: text))
