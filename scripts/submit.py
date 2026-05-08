@@ -96,7 +96,19 @@ if not versions['data']:
     })
     versions = {'data': [new_ver['data']]}
 
+WHATS_NEW = 'シニア向けにUIを刷新しました。文字を大きく、操作を「読む・作る・翻訳」に整理。長文PDFの複数ページ化、写真読み込み順の安定化も改善。'
+
 version_id = versions['data'][0]['id']
+
+# whatsNew を設定（v1.1以降で必須）
+ver_locs = api('GET', f'/appStoreVersions/{version_id}/appStoreVersionLocalizations')
+for vl in ver_locs.get('data', []):
+    vl_id = vl['id']
+    api('PATCH', f'/appStoreVersionLocalizations/{vl_id}', json={
+        'data': {'type': 'appStoreVersionLocalizations', 'id': vl_id,
+                 'attributes': {'whatsNew': WHATS_NEW}}
+    })
+    print(f'  Set whatsNew for {vl["attributes"]["locale"]}')
 
 # レビュー詳細（連絡先 + デモアカウント不要）
 rd_attrs = {**REVIEW_CONTACT, 'demoAccountRequired': False, 'demoAccountName': '', 'demoAccountPassword': ''}
