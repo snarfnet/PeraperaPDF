@@ -64,16 +64,21 @@ api('PATCH', f'/apps/{APP_ID}', json={
              'attributes': {'contentRightsDeclaration': 'DOES_NOT_USE_THIRD_PARTY_CONTENT'}}
 })
 
-# privacyPolicyUrl を appInfoLocalizations に設定
+# privacyPolicyUrl を appInfoLocalizations に設定（既に設定済みなら失敗してもOK）
 app_infos = api('GET', f'/apps/{APP_ID}/appInfos')
 for info in app_infos.get('data', []):
     locs = api('GET', f'/appInfos/{info["id"]}/appInfoLocalizations')
     for loc in locs.get('data', []):
         loc_id = loc['id']
-        api('PATCH', f'/appInfoLocalizations/{loc_id}', json={
+        r = requests.patch(f'https://api.appstoreconnect.apple.com/v1/appInfoLocalizations/{loc_id}',
+                           headers=headers(), json={
             'data': {'type': 'appInfoLocalizations', 'id': loc_id,
                      'attributes': {'privacyPolicyUrl': PRIVACY_URL}}
         })
+        if r.ok:
+            print(f'  Updated privacyPolicyUrl for {loc_id}')
+        else:
+            print(f'  privacyPolicyUrl already set for {loc_id}, skipping')
 
 # バージョン取得（なければ新規作成）
 VERSION_STRING = '1.1'
